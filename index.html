@@ -67,6 +67,11 @@ h2.title { font-size: clamp(32px, 4.6vw, 56px); line-height: 1.05; letter-spacin
 .lang button svg { width: 16px; height: 11px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(255,255,255,.15); flex: none; }
 .lang button[aria-pressed="true"] { color: #fff; }
 .lang button:hover { color: var(--text); }
+/* phones: the switch floats on its own under the header, top-right */
+.lang.floating { position: fixed; z-index: 55; right: 12px; top: 72px; padding: 4px; background: rgba(17,17,22,.82); border-color: rgba(255,255,255,.14); backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%); box-shadow: 0 14px 34px -10px rgba(0,0,0,.75); animation: langIn .6s var(--ease) .9s both; }
+.lang.floating .thumb { top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); }
+.lang.floating button { padding: 7px 11px; font-size: 12.5px; }
+@keyframes langIn { from { opacity: 0; transform: translateY(-12px) scale(.9); } to { opacity: 1; transform: none; } }
 .nav .hire { padding: 7px 16px; font-size: 14px; font-weight: 600; border-radius: 999px; background: var(--text); color: var(--bg); transition: transform .2s; }
 .nav .hire:hover { transform: scale(1.04); }
 
@@ -366,7 +371,6 @@ footer .mono { font-family: var(--mono); }
   .menu, .nav .me span { display: none; }
   .nav .me { padding-right: 0; }
   .nav .hire { padding: 7px 13px; font-size: 13px; }
-  .lang button { padding: 6px 9px; font-size: 12px; }
   .bento { gap: 10px; margin-top: 28px; }
   .card { padding: 18px; border-radius: 16px; }
   .card.work { padding: 0; }
@@ -1336,6 +1340,16 @@ var SETTINGS = {
 
   /* ---------- language switch ---------- */
   var langBox = document.querySelector(".lang");
+  /* on phones the language switch leaves the header and floats in the corner */
+  if (langBox) {
+    var navEl = document.querySelector(".nav"), hireEl = navEl.querySelector(".hire"), phone = window.matchMedia("(max-width: 720px)");
+    var placeLang = function () {
+      if (phone.matches) { if (langBox.parentNode !== document.body) { document.body.appendChild(langBox); langBox.classList.add("floating"); } }
+      else if (langBox.parentNode !== navEl) { navEl.insertBefore(langBox, hireEl); langBox.classList.remove("floating"); }
+    };
+    placeLang();
+    if (phone.addEventListener) phone.addEventListener("change", placeLang); else phone.addListener(placeLang);
+  }
   function setLang(l, save) {
     lang = l === "id" ? "id" : "en";
     document.documentElement.lang = lang;
