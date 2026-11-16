@@ -303,6 +303,18 @@ footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wr
 footer a:hover { color: var(--text); }
 footer .mono { font-family: var(--mono); }
 
+/* ---------- touch screens: hover effects triggered by scroll position ---------- */
+@media (hover: none) {
+  .card::before { background: radial-gradient(520px circle at 50% 0%, rgba(99,102,241,.2), transparent 60%); opacity: 0; transition: opacity .8s var(--ease); }
+  .card::after { background: radial-gradient(360px circle at 50% 0%, rgba(165,180,252,.7), transparent 55%); opacity: 0; transition: opacity .8s var(--ease); }
+  .card.active::before, .card.active::after { opacity: 1; }
+  .work.active .window { transform: translateY(-6px) scale(1.012); }
+  .work.active .window img.render { transform: scale(1.05); }
+  .work .window, .work .window img.render { transition-duration: .9s; }
+  .tag.active { background: rgba(99,102,241,.14); border-color: rgba(99,102,241,.5); }
+  .h-bar a.ico:active, .btn:active, .lang button:active { transform: scale(.95); }
+}
+
 /* ---------- responsive ---------- */
 @media (max-width: 1100px) {
   .h-card { width: 380px; }
@@ -1082,13 +1094,25 @@ var SETTINGS = {
   if ("IntersectionObserver" in window) {
     new IntersectionObserver(function (es) { heroVisible = es[0].isIntersecting; }, { threshold: 0 }).observe(hero);
   }
-  var layers = all("[data-depth]").map(function (el) { return { el: el, d: parseFloat(el.getAttribute("data-depth")) * 1.7 }; });
-  var tx = 0, ty = 0, cx = 0, cy = 0;
-  var useParallax = finePointer && !reduced && window.matchMedia("(min-width: 901px)").matches;
-  if (useParallax) {
-    window.addEventListener("pointermove", function (e) {
-      tx = (e.clientX / window.innerWidth - .5) * 2;
-      ty = (e.clientY / window.innerHeight - .5) * 2;
+  var touchMode = !finePointer;
+  var stacked = window.matchMedia("(max-width: 900px)");
+  var layers = all("[data-depth]").map(function (el) {
+    return { el: el, d: parseFloat(el.getAttribute("data-depth")) * 1.7, stage: !!el.closest(".stage"), back: el.closest(".bigname") ? .32 : .1 };
+  });
+  var tx = 0, ty = 0, cx = 0, cy = 0, tiltSeen = false;
+  if (!reduced) {
+    if (finePointer) {
+      window.addEventListener("pointermove", function (e) {
+        tx = (e.clientX / window.innerWidth - .5) * 2;
+        ty = (e.clientY / window.innerHeight - .5) * 2;
+      }, { passive: true });
+    }
+    /* phones: tilting the device moves the layers (works on Android without a prompt) */
+    window.addEventListener("deviceorientation", function (e) {
+      if (e.gamma == null) return;
+      tiltSeen = true;
+      tx = Math.max(-1, Math.min(1, e.gamma / 25));
+      ty = Math.max(-1, Math.min(1, (e.beta - 45) / 25));
     }, { passive: true });
   }
 
@@ -1105,6 +1129,7 @@ var SETTINGS = {
     canvas.width = W * dpr; canvas.height = H * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     var ox = W / 2 + Math.min(W * .06, 70), oy = H * .42, R = Math.min(W * .3, H * .36);
+    center = { x: ox, y: oy, R: R }; rad = Math.max(90, Math.min(150, W * .28));
     var ph = [rnd(0, 6), rnd(0, 6), rnd(0, 6), rnd(0, 6)];
     function edge(a) { return R * (.78 + .16 * Math.sin(a * 3 + ph[0]) + .1 * Math.sin(a * 5 + ph[1]) + .07 * Math.sin(a * 9 + ph[2]) + .05 * Math.sin(a * 14 + ph[3])); }
     var N = W < 700 ? 1300 : 2600;
@@ -1119,10 +1144,13 @@ var SETTINGS = {
     }
     glow = { x: ox, y: oy, r: R * 1.25 };
   }
-  var glow = null;
+  var glow = null, center = null, rad = 150, lastTouch = -1e9;
   function draw(time) {
     ctx.clearRect(0, 0, W, H);
     var t = (time - t0) / 1000, px = cx * -10, py = cy * -10;
+    /* on touch screens, when nobody is touching, an invisible "finger" drifts through the splash */
+    var auto = touchMode && center && time - lastTouch > 1400;
+    if (auto) { mouse.x = center.x + Math.cos(t * .55) * center.R * .85; mouse.y = center.y + Math.sin(t * .8) * center.R * .55; }
     if (glow) {
       var g = ctx.createRadialGradient(glow.x + px, glow.y + py, 0, glow.x + px, glow.y + py, glow.r);
       g.addColorStop(0, "rgba(34,211,238,.22)"); g.addColorStop(.45, "rgba(79,70,229,.14)"); g.addColorStop(1, "rgba(79,70,229,0)");
@@ -1135,7 +1163,8 @@ var SETTINGS = {
         var gx = q.hx + Math.sin(t * .7 + q.p) * 3 + px, gy = q.hy + Math.cos(t * .6 + q.p) * 3 + py;
         q.vx += (gx - q.x) * q.k; q.vy += (gy - q.y) * q.k;
         var dx = q.x - mouse.x, dy = q.y - mouse.y, dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 150 && dist > .1) { var f = Math.pow(1 - dist / 150, 2) * 7; q.vx += dx / dist * f; q.vy += dy / dist * f; }
+        var rr = auto ? rad * .55 : rad;
+        if (dist < rr && dist > .1) { var f = Math.pow(1 - dist / rr, 2) * (auto ? 2.4 : 7); q.vx += dx / dist * f; q.vy += dy / dist * f; }
         q.vx *= .86; q.vy *= .86; q.x += q.vx; q.y += q.vy;
       }
       ctx.fillStyle = "rgba(" + q.c + "," + q.a + ")";
@@ -1145,15 +1174,35 @@ var SETTINGS = {
   }
   if (ctx) {
     build();
-    window.addEventListener("resize", function () { build(); if (reduced) draw(0); });
-    hero.addEventListener("pointermove", function (e) { var r = canvas.getBoundingClientRect(); mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top; });
-    hero.addEventListener("pointerleave", function () { mouse.x = mouse.y = -9999; });
+    /* rebuild only when the width changes: phone address bars resize the height while scrolling */
+    var builtW = canvas.getBoundingClientRect().width;
+    window.addEventListener("resize", function () {
+      var w = canvas.getBoundingClientRect().width;
+      if (Math.abs(w - builtW) < 2) return;
+      builtW = w; build(); if (reduced) draw(0);
+    });
+    function aim(x, y) { var r = canvas.getBoundingClientRect(); mouse.x = x - r.left; mouse.y = y - r.top; }
+    hero.addEventListener("pointermove", function (e) { if (e.pointerType === "mouse") aim(e.clientX, e.clientY); });
+    hero.addEventListener("pointerleave", function (e) { if (e.pointerType === "mouse") mouse.x = mouse.y = -9999; });
+    /* touch: works while the finger scrolls too, so the splash follows the thumb */
+    function onTouch(e) { var t = e.touches[0]; if (!t) return; lastTouch = performance.now(); aim(t.clientX, t.clientY); }
+    hero.addEventListener("touchstart", onTouch, { passive: true });
+    hero.addEventListener("touchmove", onTouch, { passive: true });
+    hero.addEventListener("touchend", function () { lastTouch = performance.now(); setTimeout(function () { if (performance.now() - lastTouch > 300) mouse.x = mouse.y = -9999; }, 350); }, { passive: true });
     if (reduced) draw(0);
   }
   (function frame(time) {
     if (heroVisible) {
-      cx += (tx - cx) * .07; cy += (ty - cy) * .07;
-      if (useParallax) layers.forEach(function (l) { l.el.style.transform = "translate3d(" + (cx * l.d).toFixed(2) + "px," + (cy * l.d).toFixed(2) + "px,0)"; });
+      if (!reduced) {
+        if (touchMode && !tiltSeen) { var tt = time / 1000; tx = Math.sin(tt * .45) * .7; ty = Math.cos(tt * .35) * .45; }
+        cx += (tx - cx) * .07; cy += (ty - cy) * .07;
+        var small = stacked.matches, sy = small ? Math.min(window.scrollY, 600) : 0;
+        layers.forEach(function (l) {
+          if (small && !l.stage) { if (l.el.style.transform) l.el.style.transform = ""; return; }   /* keep buttons still on phones */
+          var k = small ? .6 : 1;
+          l.el.style.transform = "translate3d(" + (cx * l.d * k).toFixed(2) + "px," + (cy * l.d * k + sy * l.back).toFixed(2) + "px,0)";
+        });
+      }
       if (ctx && !reduced) draw(time);
     }
     requestAnimationFrame(frame);
@@ -1181,6 +1230,14 @@ var SETTINGS = {
         if (k < 1) requestAnimationFrame(step);
       })(start);
     });
+  }
+
+  /* ---------- touch screens: cards light up as they scroll through the middle ---------- */
+  if (touchMode && "IntersectionObserver" in window) {
+    var mid = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { e.target.classList.toggle("active", e.isIntersecting); });
+    }, { rootMargin: "-38% 0px -38% 0px", threshold: 0 });
+    all(".spot, .work, .tag").forEach(function (c) { mid.observe(c); });
   }
 
   /* ---------- spotlight cards ---------- */
